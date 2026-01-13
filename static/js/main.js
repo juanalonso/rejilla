@@ -205,5 +205,5 @@ generateButton.addEventListener("click", function () {
     const raw = stlSerializer.serialize({ binary: true }, geometry);
     const blob = new Blob(raw, { type: "application/octet-stream" });
 
-    downloadBlob(blob, `cardamo_seed_${CONFIG.SEED}.stl`);
+    downloadBlob(blob, `cardano_seed_${CONFIG.SEED}.stl`);
 });
