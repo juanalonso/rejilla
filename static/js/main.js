@@ -18,7 +18,8 @@ const CONFIG = {
     NUM_HOLES: 8,
     PIECE_HEIGHT: 2,
     WALL_HEIGHT: 1,
-    SEED: getSeedFromUrl()
+    SEED: getSeedFromUrl(),
+    LOG_OPERATIONS: false
 };
 
 // Tamaño de la rejilla y márgenes
@@ -32,17 +33,28 @@ const MARGIN = (CONFIG.POSTIT_WIDTH - GRID_SIZE_MM) / 2;
 // ==========================================
 
 // Función para obtener la semilla de la URL
+// Función para obtener la semilla de la URL... y si no existe, crearla y guardarla en la URL
 function getSeedFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const seedParam = params.get("SEED");
 
+    // 1. Intentamos leer de la URL
     if (seedParam !== null) {
         const seedValue = parseInt(seedParam, 10);
         if (!isNaN(seedValue) && seedValue >= 0) {
             return seedValue;
         }
     }
-    return 1971; // Valor por defecto
+
+    // 2. Si no hay (o no vale), generamos una aleatoria
+    const newSeed = Math.floor(Math.random() * 1000000);
+
+    // 3. Actualizamos la URL para que el usuario vea (y pueda compartir) esta semilla
+    const newUrl = new URL(window.location);
+    newUrl.searchParams.set("SEED", newSeed);
+    window.history.replaceState({}, '', newUrl);
+
+    return newSeed;
 };
 
 // Descarga un Blob como archivo en el navegador.
@@ -104,20 +116,20 @@ class CardanoGrid {
 
     // Calcula las posiciones finales de los agujeros basándose en las rotaciones
     generateCardanoGrid() {
-        console.log("--- Generando Agujeros ---");
+        if (CONFIG.LOG_OPERATIONS) console.log("--- Generando Agujeros ---");
 
         for (let y = 0; y < this.rotGridSize; y++) {
             for (let x = 0; x < this.rotGridSize; x++) {
                 const numRotations = this.rotationsGrid[x][y];
 
-                console.log(`*** Casilla ${x}, ${y} | Rotaciones: ${numRotations}`);
+                if (CONFIG.LOG_OPERATIONS) console.log(`*** Casilla ${x}, ${y} | Rotaciones: ${numRotations}`);
 
                 let [rx, ry] = [x, y];
 
                 // 1. Simular rotaciones
                 for (let r = 0; r < numRotations; r++) {
                     [rx, ry] = this.rotate(rx, ry);
-                    console.log(`   Posición parcial: ${rx}, ${ry}`);
+                    if (CONFIG.LOG_OPERATIONS) console.log(`   Posición parcial: ${rx}, ${ry}`);
                 }
 
                 // 2. Transladar al cuadrante correcto
@@ -128,12 +140,14 @@ class CardanoGrid {
                     ry += CONFIG.NUM_HOLES / 2;
                 }
 
-                console.log(`   Posición final: ${rx}, ${ry}`);
+                if (CONFIG.LOG_OPERATIONS) console.log(`   Posición final: ${rx}, ${ry}`);
                 this.holes[rx][ry] = 1;
             }
         }
         return this.holes;
     }
+
+
 }
 
 
@@ -191,19 +205,69 @@ function buildGeometry(holesMask) {
 
 
 // ==========================================
-// FUNCIÓN PARA EL BOTÓN
+// RENDERIZADO VISUAL
 // ==========================================
 
+function renderGridPreview(cardano) {
+    const container = document.getElementById("grid-preview");
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    for (let y = 0; y < CONFIG.NUM_HOLES; y++) {
+        for (let x = 0; x < CONFIG.NUM_HOLES; x++) {
+            const isHole = cardano.holes[x][y] === 1;
+            const icon = document.createElement("i");
+            if (isHole) {
+                icon.className = "bi bi-square-fill text-postit";
+            } else {
+                icon.className = "bi bi-square-fill text-primary";
+            }
+
+            container.appendChild(icon);
+        }
+    }
+}
+
+
+// ==========================================
+// INICIALIZACIÓN Y EVENTOS
+// ==========================================
+
+// 1. Generamos la rejilla nada más cargar (para futura previsualización)
+const cardano = new CardanoGrid(CONFIG.SEED);
+cardano.generateCardanoGrid();
+renderGridPreview(cardano); // Pintamos la rejilla
+
 const generateButton = document.getElementById("btn");
+const gridPreview = document.getElementById("grid-preview");
 
 generateButton.addEventListener("click", function () {
-
-    const cardano = new CardanoGrid(CONFIG.SEED);
-    cardano.generateCardanoGrid();
-
+    // 2. Al hacer clic, generamos solo la geometría (STL) usando la rejilla ya calculada
     const geometry = buildGeometry(cardano.holes);
     const raw = stlSerializer.serialize({ binary: true }, geometry);
     const blob = new Blob(raw, { type: "application/octet-stream" });
 
     downloadBlob(blob, `cardano_seed_${CONFIG.SEED}.stl`);
+});
+
+gridPreview.addEventListener("click", function () {
+    // 1. Nueva semilla aleatoria
+    const newSeed = Math.floor(Math.random() * 1000000);
+    CONFIG.SEED = newSeed;
+
+    // 2. Actualizamos URL
+    const newUrl = new URL(window.location);
+    newUrl.searchParams.set("SEED", newSeed);
+    window.history.replaceState({}, '', newUrl);
+
+    // 3. Regeneramos rejilla con la nueva semilla
+    cardano.rng = mulberry32(CONFIG.SEED); // Actualizamos el generador RNG
+    cardano.holes = Array.from({ length: CONFIG.NUM_HOLES }, function () { return Array(CONFIG.NUM_HOLES).fill(0); }); // Limpiamos agujeros
+    cardano.rotationsGrid = []; // Limpiamos rotaciones
+    cardano._initRotations(); // Re-inicializamos rotaciones
+
+    // 4. Recalculamos y pintamos
+    cardano.generateCardanoGrid();
+    renderGridPreview(cardano);
 });

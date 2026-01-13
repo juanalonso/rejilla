@@ -1,3 +1,35 @@
+:root {
+    --postit-color: #feff9c;
+}
+
 .fw-bolder {
     font-weight: 500 !important;
+}
+
+.text-postit {
+    color: var(--postit-color);
+    background-color: #000;
+}
+
+/* Contenedor de la previsualización */
+#grid-preview {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    width: fit-content;
+    margin: 0 auto;
+    cursor: pointer;
+    transition: box-shadow 0.05s ease;
+}
+
+#grid-preview:hover {
+    box-shadow: 0 0 10px 8px var(--postit-color);
+}
+
+#grid-preview i {
+    font-size: 0.75rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
